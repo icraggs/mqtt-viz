@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>My new three.js app</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+		<style>
+			body {
+				background-color: #000;
+				margin: 0;
+				overflow: hidden;
+			}
+			canvas { width: 100%; height: 100% }
+			#info {
+				position: absolute;
+				top: 0px;
+				width: 100%;
+				color: #FFF;
+				padding: 5px;
+				font-family: Monospace;
+				font-size: 13px;
+				text-align: center;
+				z-index: 1;
+			}
+			.label{
+				color: #FFF;
+				font-family: sans-serif;
+				padding: 2px;
+				background: rgba( 0, 0, 0, .6 );
+			}
+			a {
+				color: #000000;
+			}
+		</style>
+	</head>
+	<body>
+		<script src="https://threejs.org/build/three.min.js"></script>
+		<script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+		<script src="https://threejs.org/examples/js/renderers/CSS2DRenderer.js"></script>
+		<script src="https://threejs.org/examples/js/vr/WebVR.js"></script>
+		<script src="https://threejs.org/examples/js/libs/dat.gui.min.js"></script>
+		<script src="https://threejs.org/examples/js/geometries/BoxLineGeometry.js"></script>
+		<script src="VRController/VRController.js"></script>
+    <script src="paho-mqtt.js"></script>
+		<script src="mqttviz.js"></script>
+		<script>
+
+		var vr = false; 
+		var speed = 0.05;
+		var controller1, controller2;
+
+		var scene = new THREE.Scene();
+		var camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 50 );
+		camera.position.z = 15;
+
+		// Orbit controls allow the camera to orbit around a target.
+		var orbit = new THREE.OrbitControls(camera);
+		orbit.autoRotate = true;
+		orbit.enableZoom = false;
+		orbit.enabled = true;
+
+		var renderer = new THREE.WebGLRenderer( { antialias: true } );
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		renderer.setClearColor( 0x000000, 1 );
+		document.body.appendChild( renderer.domElement );
+		if (vr) {
+			renderer.vr.enabled = vr;
+      renderer.vr.standing = true;
+			document.body.appendChild(WEBVR.createButton(renderer));
+			//controllers();
+		}
+
+		labelRenderer = new THREE.CSS2DRenderer();
+		labelRenderer.setSize( window.innerWidth, window.innerHeight );
+		labelRenderer.domElement.style.position = 'absolute';
+		labelRenderer.domElement.style.top = 0;
+		document.body.appendChild(labelRenderer.domElement);
+
+		var gui = initGui();
+
+		var lights = [];
+		lights[ 0 ] = new THREE.PointLight( 0xffffff, 1, 0 );
+		lights[ 1 ] = new THREE.PointLight( 0xffffff, 1, 0 );
+		lights[ 2 ] = new THREE.PointLight( 0xffffff, 1, 0 );
+
+		lights[ 0 ].position.set( 0, 200, 0 );
+		lights[ 1 ].position.set( 100, 200, 100 );
+		lights[ 2 ].position.set( - 100, - 200, - 100 );
+
+		scene.add( lights[ 0 ] );
+		scene.add( lights[ 1 ] );
+		scene.add( lights[ 2 ] );
+
+		room = create_room();
+
+		var clients = {};
+		var message_queue = [];
+		var curpacket = null;
+
+		var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+		directionalLight.castShadow = true;
+		scene.add(directionalLight);
+
+		hostname = 'paho8181.cloudapp.net';
+		hostname = 'localhost';
+		port = 1883
+		client = new Paho.Client(hostname, port, "packet-display");
+
+		var broker1 = create_broker("broker:"+hostname);
+
+		function onConnected(reconnect, uri) {
+			// Once a connection has been made, make a subscription and send a message.
+			console.log('connected');
+			client.subscribe('$SYS/clients-packets', { qos: 0 });	
+		}	
+
+		function onMessageArrived(message) {	
+			try {		
+				var obj = JSON.parse(message.payloadString);
+				message_queue.push(obj);
+
+			} catch(err) {
+				console.log(err);
+			}
+		}
+		
+		// set callback handlers
+		//client.onConnectionLost = onConnectionLost;
+		client.onMessageArrived = onMessageArrived;
+		client.onConnected = onConnected;
+
+		var options = {
+    		invocationContext: { host: hostname, port: port },
+    		timeout: 30,
+    		keepAliveInterval: 30,
+    		cleanSession: false,
+    		useSSL: true,
+    		reconnect: true
+    		//onSuccess: null,
+    		//onFailure: null
+  		};
+
+		client.connect(options);
+
+		function render_next_frame() {			
+			next_frame();
+			renderer.render( scene, camera );
+			labelRenderer.render( scene, camera );
+			//orbit.update();
+              //  Here’s VRController’s UPDATE goods right here:
+	//  This one command in your animation loop is going to handle
+	//  all the VR controller business you need to get done!
+	THREE.VRController.update()
+		}
+
+		if (vr) {
+			renderer.setAnimationLoop(render_next_frame);
+		} else {
+			function animate() {
+				requestAnimationFrame(animate);
+				render_next_frame();
+			}
+			animate();
+		}
+		</script>
+	</body>
+</html>
